@@ -1,0 +1,19 @@
+{
+  "gemma4": {
+    "source": "hf",
+    "hf_repo": "ggml-org/gemma-4-E4B-it-GGUF:Q4_K_M",
+    "model_file": "gemma4-e4b.gguf",
+    "jinja": true,
+    "context": 32768
+  },
+  "gpt-oss:20b": {
+    "source": "ollama",
+    "ollama_model": "gpt-oss:20b",
+    "context": 32768
+  },
+  "qwen3-coder:30b": {
+    "source": "ollama",
+    "ollama_model": "qwen3-coder:30b",
+    "context": 32768
+  }
+}
