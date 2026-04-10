@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-llamactl is a single-file Python CLI (`src/main.py`) for managing a local
+llamactl is a single-file Python CLI (`src/llamactl/main.py`) for managing a local
 [llama-cpp-turboquant](https://github.com/TheTom/llama-cpp-turboquant) server
 on macOS Apple Silicon. It wraps [immortal](https://immortal.run/) process
 supervision and handles model switching across HuggingFace, Ollama, and local
@@ -35,7 +35,7 @@ uv sync --all-extras
 
 ## Architecture
 
-- **`src/main.py`** -- entire CLI in one file (`main.py` at root is a symlink). Uses Typer for subcommands
+- **`src/llamactl/main.py`** -- entire CLI in one file (`main.py` at root is a symlink). Uses Typer for subcommands
   (`status`, `start`, `stop`, `restart`, `logs`, `models`, `switch`, `pull`,
   `presets`). Hardcoded paths assume macOS Homebrew layout and `~/models/`,
   `~/git/llama-cpp-turboquant/`, `~/.ollama/models/`.

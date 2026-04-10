@@ -2,10 +2,10 @@
 
 import httpx
 import json
-import main
 import os
 import pytest
-from main import app
+from llamactl import main
+from llamactl.main import app
 from pathlib import Path
 from typer.testing import CliRunner
 from unittest.mock import MagicMock, patch

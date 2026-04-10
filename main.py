@@ -1,1 +1,1 @@
-src/main.py
+src/llamactl/main.py

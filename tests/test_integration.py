@@ -2,9 +2,9 @@
 
 import httpx
 import json
-import main
 import pytest
-from main import app
+from llamactl import main
+from llamactl.main import app
 from pathlib import Path
 from typer.testing import CliRunner
 from unittest.mock import MagicMock, patch
@@ -267,7 +267,7 @@ class TestPullOllamaIntegration:
             MagicMock(status="success", total=None, completed=None),
         ]
 
-        with patch("main.ollama_client", create=True) as _:
+        with patch("llamactl.main.ollama_client", create=True) as _:
             with patch.dict("sys.modules", {"ollama": MagicMock()}) as _:
                 import sys
 
@@ -275,7 +275,7 @@ class TestPullOllamaIntegration:
                 mock_ollama.pull.return_value = iter(progress_events)
 
                 # Patch the import inside pull()
-                with patch("main._resolve_ollama_model_path") as mock_resolve:
+                with patch("llamactl.main._resolve_ollama_model_path") as mock_resolve:
                     blob = ollama_tree / "blobs" / "sha256-abc123def456"
                     mock_resolve.return_value = blob
 

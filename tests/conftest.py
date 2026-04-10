@@ -1,15 +1,9 @@
-"""Shared fixtures for main tests."""
+"""Shared fixtures for llamactl tests."""
 
 import json
 import pytest
-import sys
-from pathlib import Path
+from llamactl import main
 from unittest.mock import MagicMock, patch
-
-# Add src/ to path so we can import main
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-
-import main
 
 SAMPLE_PRESETS = {
     "test-hf": {

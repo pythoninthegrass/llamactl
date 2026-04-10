@@ -46,8 +46,10 @@ from pathlib import Path
 from typing import Annotated
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-# Support running from src/ (direct) or project root (via symlink)
-PROJECT_DIR = SCRIPT_DIR if (SCRIPT_DIR / "presets.json").exists() else SCRIPT_DIR.parent
+# Walk up from script dir to find project root (contains presets.json)
+PROJECT_DIR = SCRIPT_DIR
+while not (PROJECT_DIR / "presets.json").exists() and PROJECT_DIR.parent != PROJECT_DIR:
+    PROJECT_DIR = PROJECT_DIR.parent
 PRESETS_PATH = PROJECT_DIR / "presets.json"
 MODELS_INI_PATH = Path.home() / "models" / "models.ini"
 LLAMA_SERVER_BIN = Path.home() / "git" / "llama-cpp-turboquant" / "build" / "bin" / "llama-server"

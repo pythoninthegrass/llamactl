@@ -2,9 +2,9 @@
 
 import httpx
 import json
-import main
 import pytest
-from main import app
+from llamactl import main
+from llamactl.main import app
 from typer.testing import CliRunner
 from unittest.mock import MagicMock, patch
 
