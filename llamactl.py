@@ -93,7 +93,15 @@ model = {{ model_path }}
 {% endif %}c = {{ context }}
 """)
 
-app = typer.Typer(help=__doc__)
+app = typer.Typer(help=__doc__, invoke_without_command=True)
+
+
+@app.callback()
+def main(ctx: typer.Context):
+    """Manage llama-server via immortal."""
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+        raise typer.Exit(0)
 
 
 def _needs_sudo() -> bool:
