@@ -382,18 +382,13 @@ class TestScoreNiahResponse:
 
 
 class TestNiahCommand:
-    def _mock_models_get(self):
-        """Return a mock for httpx.get that returns a loaded model list."""
-        resp = MagicMock()
-        resp.json.return_value = {"data": [{"id": "test-model"}]}
-        return resp
-
-    def _patch_niah(self, post_resp):
-        """Patch both httpx.get (models) and httpx.post (completions) for niah tests."""
-        return (
-            patch.object(llamactl.httpx, "get", return_value=self._mock_models_get()),
-            patch.object(llamactl.httpx, "post", return_value=post_resp),
-        )
+    @pytest.fixture(autouse=True)
+    def _niah_models_ini(self, tmp_path):
+        """Write a models.ini with a known model name for niah tests."""
+        ini = tmp_path / "models.ini"
+        ini.write_text("version = 1\n\n[*]\nc = 32768\n\n[test-model]\nmodel = /tmp/test.gguf\nc = 32768\n")
+        with patch.object(llamactl, "MODELS_INI_PATH", ini):
+            yield
 
     @pytest.mark.unit
     def test_niah_pass(self):
@@ -402,8 +397,7 @@ class TestNiahCommand:
             "choices": [{"message": {"content": "Eat a sandwich and sit in Dolores Park on a sunny day."}}]
         }
         mock_resp.raise_for_status = MagicMock()
-        p_get, p_post = self._patch_niah(mock_resp)
-        with p_get, p_post as mock_post:
+        with patch.object(llamactl.httpx, "post", return_value=mock_resp) as mock_post:
             result = runner.invoke(app, ["niah"])
         assert result.exit_code == 0
         assert "PASS" in result.output
@@ -414,15 +408,14 @@ class TestNiahCommand:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"choices": [{"message": {"content": "I don't know."}}]}
         mock_resp.raise_for_status = MagicMock()
-        p_get, p_post = self._patch_niah(mock_resp)
-        with p_get, p_post:
+        with patch.object(llamactl.httpx, "post", return_value=mock_resp):
             result = runner.invoke(app, ["niah"])
         assert result.exit_code == 0
         assert "FAIL" in result.output
 
     @pytest.mark.unit
     def test_niah_server_down(self):
-        with patch.object(llamactl.httpx, "get", side_effect=httpx.ConnectError("refused")):
+        with patch.object(llamactl.httpx, "post", side_effect=httpx.ConnectError("refused")):
             result = runner.invoke(app, ["niah"])
         assert result.exit_code == 1
 
@@ -432,8 +425,7 @@ class TestNiahCommand:
         mock_resp.status_code = 400
         mock_resp.text = '{"error": "context too small"}'
         mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError("400 Bad Request", request=MagicMock(), response=mock_resp)
-        p_get, p_post = self._patch_niah(mock_resp)
-        with p_get, p_post:
+        with patch.object(llamactl.httpx, "post", return_value=mock_resp):
             result = runner.invoke(app, ["niah"])
         assert result.exit_code == 1
 
@@ -442,8 +434,7 @@ class TestNiahCommand:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"choices": [{"message": {"content": "sandwich dolores park sunny"}}]}
         mock_resp.raise_for_status = MagicMock()
-        p_get, p_post = self._patch_niah(mock_resp)
-        with p_get, p_post:
+        with patch.object(llamactl.httpx, "post", return_value=mock_resp):
             result = runner.invoke(app, ["niah", "--depth", "25", "--context", "2048"])
         assert result.exit_code == 0
         assert "PASS" in result.output

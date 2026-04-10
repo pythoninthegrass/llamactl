@@ -402,17 +402,17 @@ def niah(
         {"role": "user", "content": f"{haystack}\n\nBased on the text above, {q}"},
     ]
 
-    # Get the currently loaded model name from the server
-    try:
-        models_resp = httpx.get(f"{SERVER_URL}/v1/models", timeout=5)
-        model_ids = [m["id"] for m in models_resp.json().get("data", [])]
-    except httpx.ConnectError:
-        typer.echo("Server not responding on port 8080", err=True)
+    # Read the model name from models.ini section headers (skip [*])
+    model_name = None
+    if MODELS_INI_PATH.exists():
+        for line in MODELS_INI_PATH.read_text().splitlines():
+            line = line.strip()
+            if line.startswith("[") and line.endswith("]") and line != "[*]":
+                model_name = line[1:-1]
+                break
+    if not model_name:
+        typer.echo(f"Could not determine model name from {MODELS_INI_PATH}", err=True)
         raise typer.Exit(1)
-    if not model_ids:
-        typer.echo("No models loaded on the server", err=True)
-        raise typer.Exit(1)
-    model_name = model_ids[0]
 
     typer.echo(f"NIAH test: model={model_name}, depth={depth}%, context~{context} tokens ({len(haystack)} chars)")
 
