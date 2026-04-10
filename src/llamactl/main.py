@@ -112,7 +112,7 @@ def main(ctx: typer.Context):
 def _needs_sudo() -> bool:
     """Check if immortalctl needs sudo (socket is root-owned)."""
     if IMMORTAL_SOCKET.exists():
-        return not os.access(IMMORTAL_SOCKET, os.R_OK)
+        return not os.access(IMMORTAL_SOCKET, os.W_OK)
     return True
 
 

@@ -23,17 +23,17 @@ class TestNeedsSudo:
             assert main._needs_sudo() is True
 
     @pytest.mark.unit
-    def test_returns_false_when_socket_readable(self, tmp_path):
+    def test_returns_false_when_socket_writable(self, tmp_path):
         sock = tmp_path / "immortal.sock"
         sock.touch()
         with patch.object(main, "IMMORTAL_SOCKET", sock):
             assert main._needs_sudo() is False
 
     @pytest.mark.unit
-    def test_returns_true_when_socket_not_readable(self, tmp_path):
+    def test_returns_true_when_socket_not_writable(self, tmp_path):
         sock = tmp_path / "immortal.sock"
         sock.touch()
-        sock.chmod(0o000)
+        sock.chmod(0o444)
         try:
             with patch.object(main, "IMMORTAL_SOCKET", sock):
                 if os.getuid() != 0:
