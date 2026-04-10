@@ -2,9 +2,9 @@
 
 import httpx
 import json
-import llamactl
+import main
 import pytest
-from llamactl import app
+from main import app
 from pathlib import Path
 from typer.testing import CliRunner
 from unittest.mock import MagicMock, patch
@@ -151,7 +151,7 @@ class TestStatusIntegration:
     @pytest.mark.integration
     def test_running_but_server_unreachable(self, mock_immortalctl):
         mock_immortalctl.return_value.stdout = "llama-server: up (pid 42)"
-        with patch.object(llamactl.httpx, "get", side_effect=httpx.ConnectError("refused")):
+        with patch.object(main.httpx, "get", side_effect=httpx.ConnectError("refused")):
             result = runner.invoke(app, ["status"])
 
         assert result.exit_code == 0
@@ -169,7 +169,7 @@ class TestNiahIntegration:
     def _niah_env(self, tmp_path):
         ini = tmp_path / "models.ini"
         ini.write_text("version = 1\n\n[*]\nc = 32768\n\n[gemma4]\nmodel = /tmp/gemma4.gguf\nc = 32768\n")
-        with patch.object(llamactl, "MODELS_INI_PATH", ini):
+        with patch.object(main, "MODELS_INI_PATH", ini):
             yield
 
     @pytest.mark.integration
@@ -181,7 +181,7 @@ class TestNiahIntegration:
         }
         mock_resp.raise_for_status = MagicMock()
 
-        with patch.object(llamactl.httpx, "post", return_value=mock_resp) as mock_post:
+        with patch.object(main.httpx, "post", return_value=mock_resp) as mock_post:
             runner.invoke(app, ["niah"])
 
         payload = mock_post.call_args[1]["json"]
@@ -202,7 +202,7 @@ class TestNiahIntegration:
             payloads.append(json)
             return mock_resp
 
-        with patch.object(llamactl.httpx, "post", side_effect=capture_post):
+        with patch.object(main.httpx, "post", side_effect=capture_post):
             runner.invoke(app, ["niah", "--context", "1024"])
             runner.invoke(app, ["niah", "--context", "8192"])
 
@@ -219,7 +219,7 @@ class TestNiahIntegration:
         }
         mock_resp.raise_for_status = MagicMock()
 
-        with patch.object(llamactl.httpx, "post", return_value=mock_resp) as mock_post:
+        with patch.object(main.httpx, "post", return_value=mock_resp) as mock_post:
             result = runner.invoke(app, [
                 "niah",
                 "--needle", "The launch code is 7249.",
@@ -238,7 +238,7 @@ class TestNiahIntegration:
         """Exit 1 when models.ini has no model section (only [*])."""
         ini = tmp_path / "models.ini"
         ini.write_text("version = 1\n\n[*]\nc = 32768\n")
-        with patch.object(llamactl, "MODELS_INI_PATH", ini):
+        with patch.object(main, "MODELS_INI_PATH", ini):
             result = runner.invoke(app, ["niah"])
 
         assert result.exit_code == 1
@@ -247,7 +247,7 @@ class TestNiahIntegration:
     @pytest.mark.integration
     def test_niah_missing_ini(self, tmp_path):
         """Exit 1 when models.ini does not exist."""
-        with patch.object(llamactl, "MODELS_INI_PATH", tmp_path / "nonexistent.ini"):
+        with patch.object(main, "MODELS_INI_PATH", tmp_path / "nonexistent.ini"):
             result = runner.invoke(app, ["niah"])
 
         assert result.exit_code == 1
@@ -267,7 +267,7 @@ class TestPullOllamaIntegration:
             MagicMock(status="success", total=None, completed=None),
         ]
 
-        with patch("llamactl.ollama_client", create=True) as _:
+        with patch("main.ollama_client", create=True) as _:
             with patch.dict("sys.modules", {"ollama": MagicMock()}) as _:
                 import sys
 
@@ -275,7 +275,7 @@ class TestPullOllamaIntegration:
                 mock_ollama.pull.return_value = iter(progress_events)
 
                 # Patch the import inside pull()
-                with patch("llamactl._resolve_ollama_model_path") as mock_resolve:
+                with patch("main._resolve_ollama_model_path") as mock_resolve:
                     blob = ollama_tree / "blobs" / "sha256-abc123def456"
                     mock_resolve.return_value = blob
 
@@ -297,7 +297,7 @@ class TestPullHFIntegration:
         mock_proc.terminate = MagicMock()
         mock_proc.wait = MagicMock()
 
-        with patch.object(llamactl.subprocess, "Popen", return_value=mock_proc):
+        with patch.object(main.subprocess, "Popen", return_value=mock_proc):
             result = runner.invoke(app, ["pull", "--hf", "org/model-GGUF:Q4_K_M"])
 
         assert result.exit_code == 0
@@ -313,7 +313,7 @@ class TestPullHFIntegration:
         mock_proc.terminate = MagicMock()
         mock_proc.wait = MagicMock()
 
-        with patch.object(llamactl.subprocess, "Popen", return_value=mock_proc):
+        with patch.object(main.subprocess, "Popen", return_value=mock_proc):
             result = runner.invoke(app, ["pull", "--hf", "org/model-GGUF:Q4_K_M"])
 
         assert result.exit_code == 0
@@ -328,14 +328,14 @@ class TestLogsIntegration:
 
     @pytest.mark.integration
     def test_logs_missing_file(self, tmp_path):
-        with patch.object(llamactl, "LOG_PATH", tmp_path / "nope.log"):
+        with patch.object(main, "LOG_PATH", tmp_path / "nope.log"):
             result = runner.invoke(app, ["logs"])
 
         assert "not found" in result.output
 
     @pytest.mark.integration
     def test_logs_err_flag_missing_file(self, tmp_path):
-        with patch.object(llamactl, "STDERR_LOG_PATH", tmp_path / "nope-err.log"):
+        with patch.object(main, "STDERR_LOG_PATH", tmp_path / "nope-err.log"):
             result = runner.invoke(app, ["logs", "--err"])
 
         assert "not found" in result.output
@@ -348,9 +348,9 @@ class TestLogsIntegration:
         stderr_log.write_text("stderr content")
 
         with (
-            patch.object(llamactl, "LOG_PATH", stdout_log),
-            patch.object(llamactl, "STDERR_LOG_PATH", stderr_log),
-            patch.object(llamactl.os, "execvp") as mock_exec,
+            patch.object(main, "LOG_PATH", stdout_log),
+            patch.object(main, "STDERR_LOG_PATH", stderr_log),
+            patch.object(main.os, "execvp") as mock_exec,
         ):
             runner.invoke(app, ["logs", "--err"])
 
@@ -364,8 +364,8 @@ class TestLogsIntegration:
         log.write_text("some log line")
 
         with (
-            patch.object(llamactl, "LOG_PATH", log),
-            patch.object(llamactl.os, "execvp") as mock_exec,
+            patch.object(main, "LOG_PATH", log),
+            patch.object(main.os, "execvp") as mock_exec,
         ):
             runner.invoke(app, ["logs", "-f"])
 
@@ -383,7 +383,7 @@ class TestModelsIntegration:
     def test_models_empty_list(self):
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"data": []}
-        with patch.object(llamactl.httpx, "get", return_value=mock_resp):
+        with patch.object(main.httpx, "get", return_value=mock_resp):
             result = runner.invoke(app, ["models"])
 
         assert result.exit_code == 0
@@ -399,7 +399,7 @@ class TestModelsIntegration:
                 {"id": "qwen3-coder:30b", "object": "model"},
             ]
         }
-        with patch.object(llamactl.httpx, "get", return_value=mock_resp):
+        with patch.object(main.httpx, "get", return_value=mock_resp):
             result = runner.invoke(app, ["models"])
 
         assert result.exit_code == 0

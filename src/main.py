@@ -46,7 +46,9 @@ from pathlib import Path
 from typing import Annotated
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PRESETS_PATH = SCRIPT_DIR / "presets.json"
+# Support running from src/ (direct) or project root (via symlink)
+PROJECT_DIR = SCRIPT_DIR if (SCRIPT_DIR / "presets.json").exists() else SCRIPT_DIR.parent
+PRESETS_PATH = PROJECT_DIR / "presets.json"
 MODELS_INI_PATH = Path.home() / "models" / "models.ini"
 LLAMA_SERVER_BIN = Path.home() / "git" / "llama-cpp-turboquant" / "build" / "bin" / "llama-server"
 OLLAMA_MODELS_DIR = Path.home() / ".ollama" / "models"
@@ -425,12 +427,12 @@ def niah(
         resp.raise_for_status()
     except httpx.ConnectError:
         typer.echo("Server not responding on port 8080", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except httpx.HTTPStatusError as e:
         typer.echo(f"Server error: {e.response.status_code}", err=True)
         with contextlib.suppress(Exception):
             typer.echo(e.response.text, err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     answer = resp.json()["choices"][0]["message"]["content"]
     passed = _score_niah_response(answer, keywords=needle and [needle] or None)

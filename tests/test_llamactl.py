@@ -1,11 +1,11 @@
-"""Unit tests for llamactl."""
+"""Unit tests for main."""
 
 import httpx
 import json
-import llamactl
+import main
 import os
 import pytest
-from llamactl import app
+from main import app
 from pathlib import Path
 from typer.testing import CliRunner
 from unittest.mock import MagicMock, patch
@@ -19,15 +19,15 @@ runner = CliRunner()
 class TestNeedsSudo:
     @pytest.mark.unit
     def test_returns_true_when_socket_missing(self, tmp_path):
-        with patch.object(llamactl, "IMMORTAL_SOCKET", tmp_path / "no_such_sock"):
-            assert llamactl._needs_sudo() is True
+        with patch.object(main, "IMMORTAL_SOCKET", tmp_path / "no_such_sock"):
+            assert main._needs_sudo() is True
 
     @pytest.mark.unit
     def test_returns_false_when_socket_readable(self, tmp_path):
         sock = tmp_path / "immortal.sock"
         sock.touch()
-        with patch.object(llamactl, "IMMORTAL_SOCKET", sock):
-            assert llamactl._needs_sudo() is False
+        with patch.object(main, "IMMORTAL_SOCKET", sock):
+            assert main._needs_sudo() is False
 
     @pytest.mark.unit
     def test_returns_true_when_socket_not_readable(self, tmp_path):
@@ -35,9 +35,9 @@ class TestNeedsSudo:
         sock.touch()
         sock.chmod(0o000)
         try:
-            with patch.object(llamactl, "IMMORTAL_SOCKET", sock):
+            with patch.object(main, "IMMORTAL_SOCKET", sock):
                 if os.getuid() != 0:
-                    assert llamactl._needs_sudo() is True
+                    assert main._needs_sudo() is True
         finally:
             sock.chmod(0o644)
 
@@ -48,7 +48,7 @@ class TestNeedsSudo:
 class TestLoadPresets:
     @pytest.mark.unit
     def test_loads_valid_presets(self, presets_file):
-        result = llamactl._load_presets()
+        result = main._load_presets()
         assert "test-hf" in result
         assert result["test-ollama"]["source"] == "ollama"
 
@@ -56,9 +56,9 @@ class TestLoadPresets:
     def test_exits_when_file_missing(self, tmp_path):
         from click.exceptions import Exit
 
-        with patch.object(llamactl, "PRESETS_PATH", tmp_path / "nope.json"):
+        with patch.object(main, "PRESETS_PATH", tmp_path / "nope.json"):
             with pytest.raises(Exit):
-                llamactl._load_presets()
+                main._load_presets()
 
 
 # -- _resolve_ollama_model_path -------------------------------------------
@@ -67,7 +67,7 @@ class TestLoadPresets:
 class TestResolveOllamaModelPath:
     @pytest.mark.unit
     def test_resolves_model_with_tag(self, ollama_tree):
-        result = llamactl._resolve_ollama_model_path("test-model:7b")
+        result = main._resolve_ollama_model_path("test-model:7b")
         assert result is not None
         assert result.exists()
         assert result.name == "sha256-abc123def456"
@@ -88,13 +88,13 @@ class TestResolveOllamaModelPath:
                 }
             )
         )
-        result = llamactl._resolve_ollama_model_path("test-model")
+        result = main._resolve_ollama_model_path("test-model")
         assert result is not None
         assert result.exists()
 
     @pytest.mark.unit
     def test_returns_none_for_missing_model(self, ollama_tree):
-        result = llamactl._resolve_ollama_model_path("nonexistent:latest")
+        result = main._resolve_ollama_model_path("nonexistent:latest")
         assert result is None
 
     @pytest.mark.unit
@@ -104,7 +104,7 @@ class TestResolveOllamaModelPath:
         (manifest_dir / "latest").write_text(
             json.dumps({"layers": [{"mediaType": "application/vnd.ollama.image.license", "digest": "sha256:lic"}]})
         )
-        result = llamactl._resolve_ollama_model_path("empty-model:latest")
+        result = main._resolve_ollama_model_path("empty-model:latest")
         assert result is None
 
 
@@ -114,7 +114,7 @@ class TestResolveOllamaModelPath:
 class TestModelsIniTemplate:
     @pytest.mark.unit
     def test_renders_basic_fields(self):
-        result = llamactl.MODELS_INI_TEMPLATE.render(
+        result = main.MODELS_INI_TEMPLATE.render(
             name="mymodel",
             source="hf",
             context=16384,
@@ -129,7 +129,7 @@ class TestModelsIniTemplate:
 
     @pytest.mark.unit
     def test_renders_jinja_flag(self):
-        result = llamactl.MODELS_INI_TEMPLATE.render(
+        result = main.MODELS_INI_TEMPLATE.render(
             name="jmodel",
             source="hf",
             context=8192,
@@ -143,7 +143,7 @@ class TestModelsIniTemplate:
 class TestOpencodeTemplate:
     @pytest.mark.unit
     def test_renders_provider_config(self):
-        result = llamactl.OPENCODE_TEMPLATE.render(
+        result = main.OPENCODE_TEMPLATE.render(
             server_url="http://127.0.0.1:8080",
             model_id="test",
             display_name="Test Model",
@@ -178,7 +178,7 @@ class TestStatusCommand:
     @pytest.mark.unit
     def test_status_server_not_responding(self, mock_immortalctl):
         mock_immortalctl.return_value.stdout = "llama-server: up (pid 1234)"
-        with patch.object(llamactl.httpx, "get", side_effect=httpx.ConnectError("refused")):
+        with patch.object(main.httpx, "get", side_effect=httpx.ConnectError("refused")):
             result = runner.invoke(app, ["status"])
             assert "not responding" in result.output
 
@@ -220,7 +220,7 @@ class TestModelsCommand:
 
     @pytest.mark.unit
     def test_models_server_down(self):
-        with patch.object(llamactl.httpx, "get", side_effect=httpx.ConnectError("refused")):
+        with patch.object(main.httpx, "get", side_effect=httpx.ConnectError("refused")):
             result = runner.invoke(app, ["models"])
             assert result.exit_code == 1
 
@@ -246,7 +246,7 @@ class TestSwitchCommand:
     def test_switch_hf_preset(self, presets_file, models_ini, mock_subprocess_run):
         model_file = models_ini.parent / "test-model.gguf"
         model_file.touch()
-        with patch.object(llamactl, "MODELS_INI_PATH", models_ini):
+        with patch.object(main, "MODELS_INI_PATH", models_ini):
             result = runner.invoke(app, ["switch", "test-hf"])
         assert result.exit_code == 0
         assert "test-hf" in result.output
@@ -308,25 +308,25 @@ class TestImmortalctl:
     @pytest.mark.unit
     def test_prepends_sudo_when_needed(self):
         with (
-            patch.object(llamactl, "_needs_sudo", return_value=True),
-            patch.object(llamactl.subprocess, "run") as mock_run,
+            patch.object(main, "_needs_sudo", return_value=True),
+            patch.object(main.subprocess, "run") as mock_run,
         ):
             mock_run.return_value = MagicMock(stdout="ok", returncode=0)
-            llamactl._immortalctl("status", "llama-server")
+            main._immortalctl("status", "llama-server")
             cmd = mock_run.call_args[0][0]
             assert cmd[0] == "sudo"
-            assert str(llamactl.IMMORTALCTL_BIN) in cmd
+            assert str(main.IMMORTALCTL_BIN) in cmd
 
     @pytest.mark.unit
     def test_no_sudo_when_not_needed(self):
         with (
-            patch.object(llamactl, "_needs_sudo", return_value=False),
-            patch.object(llamactl.subprocess, "run") as mock_run,
+            patch.object(main, "_needs_sudo", return_value=False),
+            patch.object(main.subprocess, "run") as mock_run,
         ):
             mock_run.return_value = MagicMock(stdout="ok", returncode=0)
-            llamactl._immortalctl("status", "llama-server")
+            main._immortalctl("status", "llama-server")
             cmd = mock_run.call_args[0][0]
-            assert cmd[0] == str(llamactl.IMMORTALCTL_BIN)
+            assert cmd[0] == str(main.IMMORTALCTL_BIN)
 
 
 # -- NIAH helpers ----------------------------------------------------------
@@ -335,50 +335,50 @@ class TestImmortalctl:
 class TestBuildNiahPrompt:
     @pytest.mark.unit
     def test_needle_present_in_output(self):
-        prompt = llamactl._build_niah_prompt(depth_pct=50, target_chars=2000)
-        assert llamactl.NIAH_NEEDLE in prompt
+        prompt = main._build_niah_prompt(depth_pct=50, target_chars=2000)
+        assert main.NIAH_NEEDLE in prompt
 
     @pytest.mark.unit
     def test_depth_zero_puts_needle_at_start(self):
-        prompt = llamactl._build_niah_prompt(depth_pct=0, target_chars=2000)
-        idx = prompt.index(llamactl.NIAH_NEEDLE)
+        prompt = main._build_niah_prompt(depth_pct=0, target_chars=2000)
+        idx = prompt.index(main.NIAH_NEEDLE)
         # Needle should appear in the first 10% of the text
         assert idx < len(prompt) * 0.1
 
     @pytest.mark.unit
     def test_depth_100_puts_needle_at_end(self):
-        prompt = llamactl._build_niah_prompt(depth_pct=100, target_chars=2000)
-        idx = prompt.index(llamactl.NIAH_NEEDLE)
+        prompt = main._build_niah_prompt(depth_pct=100, target_chars=2000)
+        idx = prompt.index(main.NIAH_NEEDLE)
         assert idx > len(prompt) * 0.7
 
     @pytest.mark.unit
     def test_custom_needle(self):
         custom = "The secret code is 7249."
-        prompt = llamactl._build_niah_prompt(depth_pct=50, target_chars=2000, needle=custom)
+        prompt = main._build_niah_prompt(depth_pct=50, target_chars=2000, needle=custom)
         assert custom in prompt
-        assert llamactl.NIAH_NEEDLE not in prompt
+        assert main.NIAH_NEEDLE not in prompt
 
 
 class TestScoreNiahResponse:
     @pytest.mark.unit
     def test_pass_when_keywords_present(self):
         response = "You should eat a sandwich and sit in Dolores Park on a sunny day."
-        assert llamactl._score_niah_response(response) is True
+        assert main._score_niah_response(response) is True
 
     @pytest.mark.unit
     def test_fail_when_keywords_missing(self):
         response = "I'm not sure what the best thing to do is."
-        assert llamactl._score_niah_response(response) is False
+        assert main._score_niah_response(response) is False
 
     @pytest.mark.unit
     def test_case_insensitive(self):
         response = "Eat a SANDWICH at DOLORES PARK on a SUNNY day."
-        assert llamactl._score_niah_response(response) is True
+        assert main._score_niah_response(response) is True
 
     @pytest.mark.unit
     def test_custom_keywords(self):
         response = "The code is 7249."
-        assert llamactl._score_niah_response(response, keywords=["7249"]) is True
+        assert main._score_niah_response(response, keywords=["7249"]) is True
 
 
 class TestNiahCommand:
@@ -387,7 +387,7 @@ class TestNiahCommand:
         """Write a models.ini with a known model name for niah tests."""
         ini = tmp_path / "models.ini"
         ini.write_text("version = 1\n\n[*]\nc = 32768\n\n[test-model]\nmodel = /tmp/test.gguf\nc = 32768\n")
-        with patch.object(llamactl, "MODELS_INI_PATH", ini):
+        with patch.object(main, "MODELS_INI_PATH", ini):
             yield
 
     @pytest.mark.unit
@@ -397,7 +397,7 @@ class TestNiahCommand:
             "choices": [{"message": {"content": "Eat a sandwich and sit in Dolores Park on a sunny day."}}]
         }
         mock_resp.raise_for_status = MagicMock()
-        with patch.object(llamactl.httpx, "post", return_value=mock_resp) as mock_post:
+        with patch.object(main.httpx, "post", return_value=mock_resp) as mock_post:
             result = runner.invoke(app, ["niah"])
         assert result.exit_code == 0
         assert "PASS" in result.output
@@ -408,14 +408,14 @@ class TestNiahCommand:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"choices": [{"message": {"content": "I don't know."}}]}
         mock_resp.raise_for_status = MagicMock()
-        with patch.object(llamactl.httpx, "post", return_value=mock_resp):
+        with patch.object(main.httpx, "post", return_value=mock_resp):
             result = runner.invoke(app, ["niah"])
         assert result.exit_code == 0
         assert "FAIL" in result.output
 
     @pytest.mark.unit
     def test_niah_server_down(self):
-        with patch.object(llamactl.httpx, "post", side_effect=httpx.ConnectError("refused")):
+        with patch.object(main.httpx, "post", side_effect=httpx.ConnectError("refused")):
             result = runner.invoke(app, ["niah"])
         assert result.exit_code == 1
 
@@ -425,7 +425,7 @@ class TestNiahCommand:
         mock_resp.status_code = 400
         mock_resp.text = '{"error": "context too small"}'
         mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError("400 Bad Request", request=MagicMock(), response=mock_resp)
-        with patch.object(llamactl.httpx, "post", return_value=mock_resp):
+        with patch.object(main.httpx, "post", return_value=mock_resp):
             result = runner.invoke(app, ["niah"])
         assert result.exit_code == 1
 
@@ -434,7 +434,7 @@ class TestNiahCommand:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"choices": [{"message": {"content": "sandwich dolores park sunny"}}]}
         mock_resp.raise_for_status = MagicMock()
-        with patch.object(llamactl.httpx, "post", return_value=mock_resp):
+        with patch.object(main.httpx, "post", return_value=mock_resp):
             result = runner.invoke(app, ["niah", "--depth", "25", "--context", "2048"])
         assert result.exit_code == 0
         assert "PASS" in result.output

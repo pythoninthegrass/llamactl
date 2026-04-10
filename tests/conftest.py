@@ -1,4 +1,4 @@
-"""Shared fixtures for llamactl tests."""
+"""Shared fixtures for main tests."""
 
 import json
 import pytest
@@ -6,10 +6,10 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-# Add project root to path so we can import llamactl
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Add src/ to path so we can import main
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import llamactl
+import main
 
 SAMPLE_PRESETS = {
     "test-hf": {
@@ -57,7 +57,7 @@ def presets_file(tmp_path):
     """Write sample presets to a temp file and patch PRESETS_PATH."""
     p = tmp_path / "presets.json"
     p.write_text(json.dumps(SAMPLE_PRESETS))
-    with patch.object(llamactl, "PRESETS_PATH", p):
+    with patch.object(main, "PRESETS_PATH", p):
         yield p
 
 
@@ -65,7 +65,7 @@ def presets_file(tmp_path):
 def models_ini(tmp_path):
     """Provide a temp models.ini path and patch MODELS_INI_PATH."""
     p = tmp_path / "models.ini"
-    with patch.object(llamactl, "MODELS_INI_PATH", p):
+    with patch.object(main, "MODELS_INI_PATH", p):
         yield p
 
 
@@ -82,30 +82,30 @@ def ollama_tree(tmp_path):
     blob = blobs_dir / "sha256-abc123def456"
     blob.write_bytes(b"\x00" * 64)
 
-    with patch.object(llamactl, "OLLAMA_MODELS_DIR", models_dir):
+    with patch.object(main, "OLLAMA_MODELS_DIR", models_dir):
         yield models_dir
 
 
 @pytest.fixture()
 def mock_immortalctl():
     """Patch _immortalctl to avoid real subprocess calls."""
-    with patch.object(llamactl, "_immortalctl") as m:
+    with patch.object(main, "_immortalctl") as m:
         m.return_value = MagicMock(stdout="", stderr="", returncode=0)
         yield m
 
 
 @pytest.fixture()
 def mock_subprocess_run():
-    """Patch subprocess.run globally within llamactl."""
-    with patch.object(llamactl.subprocess, "run") as m:
+    """Patch subprocess.run globally within main."""
+    with patch.object(main.subprocess, "run") as m:
         m.return_value = MagicMock(stdout="", stderr="", returncode=0)
         yield m
 
 
 @pytest.fixture()
 def mock_httpx_get():
-    """Patch httpx.get within llamactl."""
-    with patch.object(llamactl.httpx, "get") as m:
+    """Patch httpx.get within main."""
+    with patch.object(main.httpx, "get") as m:
         resp = MagicMock()
         resp.json.return_value = SAMPLE_MODELS_RESPONSE
         m.return_value = resp

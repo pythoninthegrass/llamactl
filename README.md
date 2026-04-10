@@ -26,8 +26,8 @@ Recommended:
 
 ```bash
 git clone <this-repo> ~/git/llamactl
-chmod +x ~/git/llamactl/llamactl.py
-ln -s ~/git/llamactl/llamactl.py ~/.local/bin/lctl
+chmod +x ~/git/llamactl/main.py
+ln -s ~/git/llamactl/main.py ~/.local/bin/lctl
 ```
 
 Verify:

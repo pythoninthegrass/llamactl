@@ -2,9 +2,9 @@
 
 import httpx
 import json
-import llamactl
+import main
 import pytest
-from llamactl import app
+from main import app
 from typer.testing import CliRunner
 from unittest.mock import MagicMock, patch
 
@@ -159,7 +159,7 @@ class TestPresetsE2E:
 
     @pytest.mark.e2e
     def test_presets_missing_file(self, tmp_path):
-        with patch.object(llamactl, "PRESETS_PATH", tmp_path / "nope.json"):
+        with patch.object(main, "PRESETS_PATH", tmp_path / "nope.json"):
             result = runner.invoke(app, ["presets"])
         assert result.exit_code == 1
 
@@ -171,7 +171,7 @@ class TestNiahE2E:
     def _niah_env(self, tmp_path):
         ini = tmp_path / "models.ini"
         ini.write_text("version = 1\n\n[*]\nc = 32768\n\n[test-model]\nmodel = /tmp/test.gguf\nc = 32768\n")
-        with patch.object(llamactl, "MODELS_INI_PATH", ini):
+        with patch.object(main, "MODELS_INI_PATH", ini):
             yield
 
     def _mock_chat_response(self, content):
@@ -182,7 +182,7 @@ class TestNiahE2E:
 
     @pytest.mark.e2e
     def test_pass_output_format(self):
-        with patch.object(llamactl.httpx, "post", return_value=self._mock_chat_response(
+        with patch.object(main.httpx, "post", return_value=self._mock_chat_response(
             "Eat a sandwich at Dolores Park on a sunny day."
         )):
             result = runner.invoke(app, ["niah"])
@@ -196,7 +196,7 @@ class TestNiahE2E:
 
     @pytest.mark.e2e
     def test_fail_output_format(self):
-        with patch.object(llamactl.httpx, "post", return_value=self._mock_chat_response(
+        with patch.object(main.httpx, "post", return_value=self._mock_chat_response(
             "I have no idea."
         )):
             result = runner.invoke(app, ["niah"])
@@ -206,7 +206,7 @@ class TestNiahE2E:
 
     @pytest.mark.e2e
     def test_depth_flag_reflected_in_output(self):
-        with patch.object(llamactl.httpx, "post", return_value=self._mock_chat_response(
+        with patch.object(main.httpx, "post", return_value=self._mock_chat_response(
             "sandwich dolores park sunny"
         )):
             result = runner.invoke(app, ["niah", "--depth", "75"])
@@ -215,7 +215,7 @@ class TestNiahE2E:
 
     @pytest.mark.e2e
     def test_server_down_error(self):
-        with patch.object(llamactl.httpx, "post", side_effect=httpx.ConnectError("refused")):
+        with patch.object(main.httpx, "post", side_effect=httpx.ConnectError("refused")):
             result = runner.invoke(app, ["niah"])
 
         assert result.exit_code == 1
@@ -229,7 +229,7 @@ class TestNiahE2E:
         mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
             "500", request=MagicMock(), response=mock_resp
         )
-        with patch.object(llamactl.httpx, "post", return_value=mock_resp):
+        with patch.object(main.httpx, "post", return_value=mock_resp):
             result = runner.invoke(app, ["niah"])
 
         assert result.exit_code == 1
