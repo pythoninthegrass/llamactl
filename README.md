@@ -26,32 +26,24 @@ Recommended:
 
 ```bash
 git clone <this-repo> ~/git/llamactl
-chmod +x ~/git/llamactl/main.py
-ln -s ~/git/llamactl/main.py ~/.local/bin/lctl
+uv tool install ~/git/llamactl
 ```
 
-Verify:
+This installs the `lctl` executable into `~/.local/bin/`.
+
+To update after pulling changes:
 
 ```bash
-lctl --help
+uv tool install ~/git/llamactl --force --reinstall
 ```
-
-On first run, uv creates a cached virtual environment and installs
-dependencies (typer, jinja2, ollama, httpx). Subsequent runs are instant.
 
 ## Quickstart
 
 ```bash
-# Check server status
+# Check server status and loaded model
 lctl status
 
-# List loaded models
-lctl models
-
-# List available presets
-lctl presets
-
-# Switch to a preset (regenerates models.ini, restarts server)
+# Switch to a model preset (rewrites models.ini, restarts server)
 lctl switch gemma4
 
 # Pull a model from Ollama
@@ -60,16 +52,23 @@ lctl pull gpt-oss:20b
 # Pull from HuggingFace
 lctl pull --hf ggml-org/gemma-4-E4B-it-GGUF:Q4_K_M
 
-# Follow server logs
-lctl logs -f
-
-# Show stderr log
-lctl logs --err
-
-# Start / stop / restart
+# Start / stop / restart the server
 lctl start
 lctl stop
 lctl restart
+
+# Follow server logs (stderr with --err)
+lctl logs -f
+lctl logs --err
+
+# List loaded models
+lctl models
+
+# List available presets
+lctl presets
+
+# Run a needle-in-a-haystack retrieval test
+lctl niah --depth 50 --context 4096
 ```
 
 The `switch` command prints the corresponding `opencode.jsonc` provider
