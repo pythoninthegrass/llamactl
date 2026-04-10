@@ -1,17 +1,15 @@
 """Shared fixtures for llamactl tests."""
 
 import json
+import pytest
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 # Add project root to path so we can import llamactl
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import llamactl
-
 
 SAMPLE_PRESETS = {
     "test-hf": {

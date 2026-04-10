@@ -1,16 +1,14 @@
 """Unit tests for llamactl."""
 
-import json
-import os
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
 import httpx
-import pytest
-from typer.testing import CliRunner
-
+import json
 import llamactl
+import os
+import pytest
 from llamactl import app
+from pathlib import Path
+from typer.testing import CliRunner
+from unittest.mock import MagicMock, patch
 
 runner = CliRunner()
 
@@ -329,3 +327,96 @@ class TestImmortalctl:
             llamactl._immortalctl("status", "llama-server")
             cmd = mock_run.call_args[0][0]
             assert cmd[0] == str(llamactl.IMMORTALCTL_BIN)
+
+
+# -- NIAH helpers ----------------------------------------------------------
+
+
+class TestBuildNiahPrompt:
+    @pytest.mark.unit
+    def test_needle_present_in_output(self):
+        prompt = llamactl._build_niah_prompt(depth_pct=50, target_chars=2000)
+        assert llamactl.NIAH_NEEDLE in prompt
+
+    @pytest.mark.unit
+    def test_depth_zero_puts_needle_at_start(self):
+        prompt = llamactl._build_niah_prompt(depth_pct=0, target_chars=2000)
+        idx = prompt.index(llamactl.NIAH_NEEDLE)
+        # Needle should appear in the first 10% of the text
+        assert idx < len(prompt) * 0.1
+
+    @pytest.mark.unit
+    def test_depth_100_puts_needle_at_end(self):
+        prompt = llamactl._build_niah_prompt(depth_pct=100, target_chars=2000)
+        idx = prompt.index(llamactl.NIAH_NEEDLE)
+        assert idx > len(prompt) * 0.7
+
+    @pytest.mark.unit
+    def test_custom_needle(self):
+        custom = "The secret code is 7249."
+        prompt = llamactl._build_niah_prompt(depth_pct=50, target_chars=2000, needle=custom)
+        assert custom in prompt
+        assert llamactl.NIAH_NEEDLE not in prompt
+
+
+class TestScoreNiahResponse:
+    @pytest.mark.unit
+    def test_pass_when_keywords_present(self):
+        response = "You should eat a sandwich and sit in Dolores Park on a sunny day."
+        assert llamactl._score_niah_response(response) is True
+
+    @pytest.mark.unit
+    def test_fail_when_keywords_missing(self):
+        response = "I'm not sure what the best thing to do is."
+        assert llamactl._score_niah_response(response) is False
+
+    @pytest.mark.unit
+    def test_case_insensitive(self):
+        response = "Eat a SANDWICH at DOLORES PARK on a SUNNY day."
+        assert llamactl._score_niah_response(response) is True
+
+    @pytest.mark.unit
+    def test_custom_keywords(self):
+        response = "The code is 7249."
+        assert llamactl._score_niah_response(response, keywords=["7249"]) is True
+
+
+class TestNiahCommand:
+    @pytest.mark.unit
+    def test_niah_pass(self):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": "Eat a sandwich and sit in Dolores Park on a sunny day."}}]
+        }
+        mock_resp.raise_for_status = MagicMock()
+        with patch.object(llamactl.httpx, "post", return_value=mock_resp) as mock_post:
+            result = runner.invoke(app, ["niah"])
+        assert result.exit_code == 0
+        assert "PASS" in result.output
+        mock_post.assert_called_once()
+
+    @pytest.mark.unit
+    def test_niah_fail(self):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"choices": [{"message": {"content": "I don't know."}}]}
+        mock_resp.raise_for_status = MagicMock()
+        with patch.object(llamactl.httpx, "post", return_value=mock_resp):
+            result = runner.invoke(app, ["niah"])
+        assert result.exit_code == 0
+        assert "FAIL" in result.output
+
+    @pytest.mark.unit
+    def test_niah_server_down(self):
+        with patch.object(llamactl.httpx, "post", side_effect=httpx.ConnectError("refused")):
+            result = runner.invoke(app, ["niah"])
+        assert result.exit_code == 1
+
+    @pytest.mark.unit
+    def test_niah_custom_depth_and_context(self):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"choices": [{"message": {"content": "sandwich dolores park sunny"}}]}
+        mock_resp.raise_for_status = MagicMock()
+        with patch.object(llamactl.httpx, "post", return_value=mock_resp):
+            result = runner.invoke(app, ["niah", "--depth", "25", "--context", "2048"])
+        assert result.exit_code == 0
+        assert "PASS" in result.output

@@ -16,7 +16,7 @@
 
 """
 Usage:
-    llamactl <status|start|stop|restart|logs|models|switch|pull|presets>
+    llamactl <status|start|stop|restart|logs|models|switch|pull|presets|niah>
 
 Commands:
     status:     Show immortal service status and loaded models
@@ -28,6 +28,7 @@ Commands:
     switch:     Switch to a model preset and restart the server
     pull:       Download a model from HuggingFace or Ollama
     presets:    List available model presets
+    niah:       Run a Needle-In-A-Haystack retrieval test
 
 Note:
     Manages llama-server via immortal.
@@ -277,12 +278,14 @@ def switch(preset: str):
 
     model_id = preset
     typer.echo("\n--- opencode.jsonc provider config ---")
-    typer.echo(OPENCODE_TEMPLATE.render(
-        server_url=SERVER_URL,
-        model_id=model_id,
-        display_name=preset,
-        context=cfg.get("context", 32768),
-    ))
+    typer.echo(
+        OPENCODE_TEMPLATE.render(
+            server_url=SERVER_URL,
+            model_id=model_id,
+            display_name=preset,
+            context=cfg.get("context", 32768),
+        )
+    )
 
 
 @app.command()
@@ -330,6 +333,93 @@ def pull(
         finally:
             proc.terminate()
             proc.wait()
+
+
+NIAH_NEEDLE = "The best thing to do in San Francisco is eat a sandwich and sit in Dolores Park on a sunny day."
+NIAH_QUESTION = "What is the best thing to do in San Francisco?"
+NIAH_KEYWORDS = ["sandwich", "dolores park", "sunny"]
+
+NIAH_FILLER_PARAGRAPHS = [
+    "The history of urban planning in modern cities reveals a complex interplay between governmental policy and private development. Zoning regulations, first introduced in the early twentieth century, sought to separate residential areas from industrial zones. Over time, mixed-use development gained popularity as city planners recognized the benefits of walkable neighborhoods. Transportation infrastructure, including highways and public transit systems, shaped the growth patterns of metropolitan areas across the country.",
+    "Agricultural practices have evolved significantly over the past century. The introduction of mechanized farming equipment transformed rural economies and reduced the labor required to produce staple crops. Crop rotation techniques, developed over centuries of trial and error, help maintain soil fertility and reduce pest populations. Modern irrigation systems allow farming in regions that would otherwise be too arid for cultivation, expanding the global food supply.",
+    "The development of telecommunications technology has proceeded through several distinct phases. Early telegraph systems enabled long-distance communication for the first time, followed by telephone networks that connected homes and businesses. The advent of radio broadcasting created new forms of entertainment and information distribution. Television further transformed media consumption patterns, while satellite communications enabled global connectivity.",
+    "Marine biology encompasses the study of organisms living in ocean environments, from microscopic plankton to the largest whales. Coral reef ecosystems support an extraordinary diversity of species and play a crucial role in coastal protection. Deep-sea exploration has revealed previously unknown species adapted to extreme pressure and darkness. Ocean currents influence global climate patterns and distribute nutrients across vast distances.",
+    "The principles of thermodynamics govern energy transfer in physical systems. The first law establishes that energy cannot be created or destroyed, only converted between forms. Heat engines convert thermal energy into mechanical work with efficiencies limited by the Carnot cycle. Entropy, a measure of disorder in a system, tends to increase over time in isolated systems according to the second law.",
+    "Classical music composition follows established formal structures that have evolved over centuries. Sonata form, developed during the Classical period, provides a framework for the development of musical themes. Orchestration techniques determine how musical ideas are distributed among different instrument groups. Counterpoint, the art of combining independent melodic lines, reached its highest development in the Baroque era.",
+    "Geological processes operate on timescales ranging from seconds to billions of years. Plate tectonics drives the movement of continental landmasses and the formation of mountain ranges. Volcanic activity releases gases and minerals from the Earth's interior, influencing atmospheric composition. Erosion by wind and water gradually reshapes landscapes, creating valleys, canyons, and sedimentary deposits.",
+    "The study of linguistics examines the structure, history, and social context of human languages. Phonology analyzes the sound systems used in different languages, while morphology studies word formation. Syntax describes the rules governing sentence structure, and semantics deals with meaning. Historical linguistics traces the evolution of language families and the spread of linguistic innovations across populations.",
+]
+
+CHARS_PER_TOKEN = 4
+
+
+def _build_niah_prompt(depth_pct: int, target_chars: int, needle: str | None = None) -> str:
+    """Build a haystack of filler text with a needle inserted at the given depth."""
+    needle = needle or NIAH_NEEDLE
+    filler_target = target_chars - len(needle)
+    if filler_target < 0:
+        filler_target = 0
+
+    # Repeat filler paragraphs until we reach the target length
+    paragraphs = []
+    total = 0
+    i = 0
+    while total < filler_target:
+        p = NIAH_FILLER_PARAGRAPHS[i % len(NIAH_FILLER_PARAGRAPHS)]
+        paragraphs.append(p)
+        total += len(p) + 2  # account for paragraph separator
+        i += 1
+
+    # Insert needle at the specified depth
+    depth_pct = max(0, min(100, depth_pct))
+    insert_idx = int(len(paragraphs) * depth_pct / 100)
+    paragraphs.insert(insert_idx, needle)
+
+    return "\n\n".join(paragraphs)
+
+
+def _score_niah_response(response: str, keywords: list[str] | None = None) -> bool:
+    """Check if the response contains the expected keywords."""
+    keywords = keywords or NIAH_KEYWORDS
+    response_lower = response.lower()
+    return all(kw.lower() in response_lower for kw in keywords)
+
+
+@app.command()
+def niah(
+    depth: Annotated[int, typer.Option("--depth", "-d", help="Needle depth percentage (0=start, 100=end)")] = 50,
+    context: Annotated[int, typer.Option("--context", "-c", help="Target context length in tokens")] = 4096,
+    needle: Annotated[str | None, typer.Option("--needle", help="Custom needle text")] = None,
+    question: Annotated[str | None, typer.Option("--question", help="Custom retrieval question")] = None,
+):
+    """Run a Needle-In-A-Haystack retrieval test against the running server."""
+    target_chars = context * CHARS_PER_TOKEN
+    haystack = _build_niah_prompt(depth_pct=depth, target_chars=target_chars, needle=needle)
+
+    q = question or NIAH_QUESTION
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant. Answer the question based only on the context provided."},
+        {"role": "user", "content": f"{haystack}\n\nBased on the text above, {q}"},
+    ]
+
+    typer.echo(f"NIAH test: depth={depth}%, context~{context} tokens ({len(haystack)} chars)")
+
+    try:
+        resp = httpx.post(
+            f"{SERVER_URL}/v1/chat/completions",
+            json={"messages": messages, "max_tokens": 256},
+            timeout=120,
+        )
+        resp.raise_for_status()
+    except httpx.ConnectError:
+        typer.echo("Server not responding on port 8080", err=True)
+        raise typer.Exit(1)
+
+    answer = resp.json()["choices"][0]["message"]["content"]
+    passed = _score_niah_response(answer, keywords=needle and [needle] or None)
+
+    typer.echo(f"Answer: {answer.strip()}")
+    typer.echo(f"Result: {'PASS' if passed else 'FAIL'}")
 
 
 @app.command()
