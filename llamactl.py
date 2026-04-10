@@ -402,12 +402,24 @@ def niah(
         {"role": "user", "content": f"{haystack}\n\nBased on the text above, {q}"},
     ]
 
-    typer.echo(f"NIAH test: depth={depth}%, context~{context} tokens ({len(haystack)} chars)")
+    # Get the currently loaded model name from the server
+    try:
+        models_resp = httpx.get(f"{SERVER_URL}/v1/models", timeout=5)
+        model_ids = [m["id"] for m in models_resp.json().get("data", [])]
+    except httpx.ConnectError:
+        typer.echo("Server not responding on port 8080", err=True)
+        raise typer.Exit(1)
+    if not model_ids:
+        typer.echo("No models loaded on the server", err=True)
+        raise typer.Exit(1)
+    model_name = model_ids[0]
+
+    typer.echo(f"NIAH test: model={model_name}, depth={depth}%, context~{context} tokens ({len(haystack)} chars)")
 
     try:
         resp = httpx.post(
             f"{SERVER_URL}/v1/chat/completions",
-            json={"messages": messages, "max_tokens": 256},
+            json={"model": model_name, "messages": messages, "max_tokens": 256},
             timeout=120,
         )
         resp.raise_for_status()
