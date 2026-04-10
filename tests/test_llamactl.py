@@ -412,6 +412,18 @@ class TestNiahCommand:
         assert result.exit_code == 1
 
     @pytest.mark.unit
+    def test_niah_http_error(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 400
+        mock_resp.text = '{"error": "context too small"}'
+        mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "400 Bad Request", request=MagicMock(), response=mock_resp
+        )
+        with patch.object(llamactl.httpx, "post", return_value=mock_resp):
+            result = runner.invoke(app, ["niah"])
+        assert result.exit_code == 1
+
+    @pytest.mark.unit
     def test_niah_custom_depth_and_context(self):
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"choices": [{"message": {"content": "sandwich dolores park sunny"}}]}

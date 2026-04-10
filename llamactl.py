@@ -414,6 +414,11 @@ def niah(
     except httpx.ConnectError:
         typer.echo("Server not responding on port 8080", err=True)
         raise typer.Exit(1)
+    except httpx.HTTPStatusError as e:
+        typer.echo(f"Server error: {e.response.status_code}", err=True)
+        with contextlib.suppress(Exception):
+            typer.echo(e.response.text, err=True)
+        raise typer.Exit(1)
 
     answer = resp.json()["choices"][0]["message"]["content"]
     passed = _score_niah_response(answer, keywords=needle and [needle] or None)
